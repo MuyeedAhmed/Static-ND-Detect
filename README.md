@@ -11,3 +11,8 @@ python ModifySourceCode.py <Project Path>
 ```python
 python CopyPysaToLib.py <Project Path> <Target directory> <check type (random, others)>
 ```
+
+## Run pysa
+```python
+pyre analyze --save-results-to ./pyre-output
+```
