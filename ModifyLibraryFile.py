@@ -5,6 +5,15 @@ import pandas as pd
 import csv
 
 class ModifyLibraryFile:
+    RANDOM_KEYWORDS = {
+        "random", "rand", "seed", "shuffle", "sample", "choice",
+        "rvs", "qrvs", "time", "clock", "perf_counter", "uuid",
+        "urandom", "getrandom", "hash", "id"
+    }
+    FP_SENSITIVE_KEYWORDS = {
+        "dot", "matmul", "linalg", "solve", "eig", "svd", "inv", "det"
+    }
+
     def __init__(self, FilePath):
         self.FilePath = FilePath
         self.OriginalCodeTemporaryPath = self.FilePath[:-3]+"_Original.py"
@@ -12,56 +21,38 @@ class ModifyLibraryFile:
         
         self.VariableDF = pd.DataFrame()
     
-    
+    def is_nondeterministic(self, node_value):
+        rhs_string = ast.unparse(node_value).lower()
+        
+        all_keywords = self.RANDOM_KEYWORDS | self.FP_SENSITIVE_KEYWORDS
+        
+        for subnode in ast.walk(node_value):
+            if isinstance(subnode, ast.Call):
+                func_name = ast.unparse(subnode.func).lower()
+                if any(kw in func_name for kw in all_keywords):
+                    return True
+        
+        if any(kw in rhs_string for kw in self.RANDOM_KEYWORDS):
+            return True
+            
+        return False
+
     def init_decorator(self):
         self.NewFile.write("import pandas as pd\n")
         self.NewFile.write("import numpy\n\n")
 
         self.NewFile.write("def _add_taint(variable, name):\n")
-        self.NewFile.write("    def get_user_input():\n")
-        self.NewFile.write("        return input("")\n")
-        self.NewFile.write("    if isinstance(variable, int) or isinstance(variable, numpy.int64):\n")
-        self.NewFile.write("        variable += int(get_user_input())\n")
-        self.NewFile.write("    elif isinstance(variable, float) or isinstance(variable, numpy.float64):\n")
-        self.NewFile.write("        variable += float(get_user_input())\n")
-        self.NewFile.write("    elif isinstance(variable, complex):\n")
-        self.NewFile.write("        real_part = float(get_user_input())\n")
-        self.NewFile.write("        imag_part = float(get_user_input())\n")
-        self.NewFile.write("        variable += complex(real_part, imag_part)\n")
-        self.NewFile.write("    elif isinstance(variable, str):\n")
-        self.NewFile.write("        variable += get_user_input()\n")
-        self.NewFile.write("    elif isinstance(variable, list):\n")
-        self.NewFile.write("        item = get_user_input()\n")
-        self.NewFile.write("        variable.append(item)\n")
-        self.NewFile.write("    elif isinstance(variable, tuple):\n")
-        self.NewFile.write("        item = get_user_input()\n")
-        self.NewFile.write("        variable = tuple(list(variable) + [item])\n")
-        self.NewFile.write("    elif isinstance(variable, dict):\n")
-        self.NewFile.write("        key = get_user_input()\n")
-        self.NewFile.write("        value = get_user_input()\n")
-        self.NewFile.write("        variable[key] = value\n")
-        self.NewFile.write("    elif isinstance(variable, set):\n")
-        self.NewFile.write("        item = get_user_input()\n")
-        self.NewFile.write("        variable.add(item)\n")
-        self.NewFile.write("    elif isinstance(variable, bytes):\n")
-        self.NewFile.write("        new_bytes = bytes(get_user_input(), 'utf-8')\n")
-        self.NewFile.write("        variable += new_bytes\n")
-        self.NewFile.write("    elif isinstance(variable, bytearray):\n")
-        self.NewFile.write("        new_bytes = bytearray(get_user_input(), 'utf-8')\n")
-        self.NewFile.write("        variable += new_bytes\n")
-        self.NewFile.write("    elif isinstance(variable, bool) or isinstance(variable, numpy.bool_):\n")
-        self.NewFile.write("        new_bool = bool(get_user_input())\n")
-        self.NewFile.write("        variable = variable or new_bool\n")
-        self.NewFile.write("    elif isinstance(variable, pd.DataFrame):\n")
-        self.NewFile.write("        new_data = eval(get_user_input())\n")
-        self.NewFile.write("        variable = variable.append(new_data, ignore_index=True)\n")
-        self.NewFile.write("    elif isinstance(variable, numpy.ndarray):\n")
-        self.NewFile.write("        element = eval(get_user_input())\n")
-        self.NewFile.write("        variable = numpy.append(variable, element)\n")
-        # self.NewFile.write("    elif isinstance(variable, inspect.BoundArguments):\n")
-        # self.NewFile.write("        variable.arguments['added_info'] = get_user_input()\n")
-        self.NewFile.write("    return variable\n")     
-
+        self.NewFile.write("    # Static taint source for Pysa\n")
+        self.NewFile.write("    _source = input()\n")
+        self.NewFile.write("    try:\n")
+        self.NewFile.write("        if isinstance(variable, (int, float, complex, numpy.number)):\n")
+        self.NewFile.write("            return variable + _source\n")
+        self.NewFile.write("        elif isinstance(variable, (list, dict, set, pd.DataFrame, numpy.ndarray)):\n")
+        self.NewFile.write("            # For collections, returning the source is enough to mark the variable as tainted\n")
+        self.NewFile.write("            return _source\n")
+        self.NewFile.write("    except:\n")
+        self.NewFile.write("        pass\n")
+        self.NewFile.write("    return _source\n")
     def reset(self):
         os.remove(self.FilePath)
         os.rename(self.OriginalCodeTemporaryPath, self.FilePath)
@@ -76,9 +67,9 @@ class ModifyLibraryFile:
         # function_name = None
         for node in ast.walk(self.tree):
             if isinstance(node, ast.Assign):
-                rhs_string = ast.unparse(node.value)
-                if "random" not in rhs_string.lower():
+                if not self.is_nondeterministic(node.value):
                     continue
+                rhs_string = ast.unparse(node.value)
                 for target in node.targets:
                     if isinstance(target, ast.Name):
                         var_dict['LineNumber'].append(node.end_lineno)
@@ -121,9 +112,9 @@ class ModifyLibraryFile:
                             # print("Error in ", node.lineno, self.FilePath, "\nError:", e)
                             pass
             elif isinstance(node, ast.AugAssign):
-                rhs_string = ast.unparse(node.value)
-                if "random" not in rhs_string.lower():
+                if not self.is_nondeterministic(node.value):
                     continue
+                rhs_string = ast.unparse(node.value)
                 if isinstance(node.target, ast.Name):
                     var_dict['LineNumber'].append(node.end_lineno)
                     var_dict['VariableName'].append(node.target.id)
@@ -140,13 +131,7 @@ class ModifyLibraryFile:
             print("No variables found in the file.")
             self.NewFile.write(self.code)
             return
-        RandomVars = self.VariableDF.loc[
-            self.VariableDF["RHS_String"].str.contains("random", case=False, na=False),
-            ["LineNumber", "VariableName", "StartLineNumber", "RHS_String"]
-        ]
-        if RandomVars.shape[0] == 0:
-            self.NewFile.write(self.code)
-            return
+        RandomVars = self.VariableDF
         
         self.init_decorator()
         OrginalFile = open(self.OriginalCodeTemporaryPath, 'r')
