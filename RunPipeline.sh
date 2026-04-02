@@ -47,8 +47,10 @@ python3 FilterPysaJSONs.py "$PROJECT_PATH/pyre-output"
 
 cd "$ROOT_DIR"
 
+mv Results/Filtered/$(basename "$PROJECT_PATH").xlsx Results/Filtered/$(basename "$PROJECT_PATH")_"$CHECK_TYPE".xlsx
+
 echo ""
 echo "Pipeline complete!"
 echo "Main result: Results/$(basename "$PROJECT_PATH").xlsx"
-echo "Filtered result: Results/Filtered/$(basename "$PROJECT_PATH").xlsx"
+echo "Filtered result: Results/Filtered/$(basename "$PROJECT_PATH")_"$CHECK_TYPE".xlsx"
 echo "TITO result: Results/Filtered/$(basename "$PROJECT_PATH")_TITO.xlsx"
