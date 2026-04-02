@@ -20,8 +20,10 @@ ROOT_DIR=$(pwd)
 echo "--- [1/6] Copying Pysa Models & Generating Config ---"
 python3 CopyPysaToLib.py "$PROJECT_PATH" "$TARGET_DIR" "$CHECK_TYPE"
 
-echo "--- [2/6] Modifying Source Code (Adding Taints) ---"
-python3 ModifySourceCode.py "$PROJECT_PATH"
+if [[ "$CHECK_TYPE" == "random" ]]; then
+    echo "--- [2/6] Modifying Source Code (Adding Taints) ---"
+    python3 ModifySourceCode.py "$PROJECT_PATH"
+fi
 
 echo "--- [3/6] Running Pysa Analyze ---"
 cd "$PROJECT_PATH"
