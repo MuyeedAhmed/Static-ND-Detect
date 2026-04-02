@@ -33,8 +33,9 @@ echo "--- [4/6] Extracting Results to XLSX ---"
 cd Utils
 python3 ExtractJSON.py "$PROJECT_PATH"
 
-echo "--- [5/6] Filtering Modules and Duplicates ---"
+echo "--- [5/6] Filtering Modules and Duplicates and add comments ---"
 python3 Filter_SeparateModules.py
+python3 ExtractComments.py "$PROJECT_PATH"
 
 echo "--- [6/6] Generating TITO (Taint-In-Taint-Out) Mappings ---"
 python3 GetTITO.py "$PROJECT_PATH"
