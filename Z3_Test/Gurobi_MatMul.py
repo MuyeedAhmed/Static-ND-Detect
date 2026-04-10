@@ -2,6 +2,7 @@ import gurobipy as gp
 from gurobipy import GRB
 import numpy as np
 import time
+import pickle
 
 def mat_mul_nxn_gurobi(model, A, B, n):
     C = [[model.addVar(lb=-GRB.INFINITY, ub=GRB.INFINITY, name=f"C_{i}_{j}") for j in range(n)] for i in range(n)]
@@ -42,6 +43,26 @@ def check_matrix_associativity_gurobi(n=2):
         print(f"Max squared difference found: {m.ObjVal}")
         print(f"AB_C[0][0]: {AB_C[0][0].X}")
         print(f"A_BC[0][0]: {A_BC[0][0].X}")
+
+        # Extract values
+        def get_vals(mat, n):
+            return [[mat[i][j].X for j in range(n)] for i in range(n)]
+        
+        A_val = get_vals(A, n)
+        B_val = get_vals(B, n)
+        C_val = get_vals(C, n)
+
+        print("\nMatrix A:")
+        print(np.array(A_val))
+        print("\nMatrix B:")
+        print(np.array(B_val))
+        print("\nMatrix C:")
+        print(np.array(C_val))
+
+        # Save to pickle
+        with open('solution.pkl', 'wb') as f:
+            pickle.dump({'A': A_val, 'B': B_val, 'C': C_val}, f)
+        print("\nSaved solution to solution.pkl")
     else:
         print("No counterexample.")
 
