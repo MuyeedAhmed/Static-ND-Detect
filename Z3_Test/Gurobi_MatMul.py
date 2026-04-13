@@ -17,7 +17,7 @@ def mat_mul_nxn_gurobi(model, A, B, n):
     return C
 
 def check_matrix_associativity_gurobi(n=2):
-    print(f"--- Gurobi Matrix Multiplication ({n}x{n}) ---")
+    print(f"--- Gurobi MatMul ({n}x{n}) ---")
     
     m = gp.Model("MatrixAssociativity")
     m.setParam('NonConvex', 2) 
@@ -43,7 +43,7 @@ def check_matrix_associativity_gurobi(n=2):
     m.optimize()
 
     if m.SolCount > 0 or m.status == GRB.OPTIMAL or m.status == GRB.SUBOPTIMAL:
-        print(f"Max squared difference found: {m.ObjVal}")
+        print(f"Max squared difference: {m.ObjVal}")
         print(f"AB_C[0][0]: {AB_C[0][0].X}")
         print(f"A_BC[0][0]: {A_BC[0][0].X}")
 
@@ -63,9 +63,8 @@ def check_matrix_associativity_gurobi(n=2):
 
         with open('solution.pkl', 'wb') as f:
             pickle.dump({'A': A_val, 'B': B_val, 'C': C_val}, f)
-        print("\nSaved solution to solution.pkl")
     else:
-        print("No counterexample.")
+        print("No counterexample")
 
 
 
@@ -103,6 +102,31 @@ def verify():
     print(f"Difference: {diff_np}")
     print(f"Squared Difference: {diff_np**2}")
 
+    print("\n--- Decimal Verification ---")
+    def mat_mul_decimal(M1, M2):
+        n = len(M1)
+        res = [[Decimal(0) for _ in range(n)] for _ in range(n)]
+        for i in range(n):
+            for j in range(n):
+                for k in range(n):
+                    res[i][j] += Decimal(str(M1[i][k])) * Decimal(str(M2[k][j]))
+        return res
+
+    A_dec = [[Decimal(str(x)) for x in row] for row in A_list]
+    B_dec = [[Decimal(str(x)) for x in row] for row in B_list]
+    C_dec = [[Decimal(str(x)) for x in row] for row in C_list]
+
+    ABC_dec = mat_mul_decimal(mat_mul_decimal(A_dec, B_dec), C_dec)
+    A_BC_dec = mat_mul_decimal(A_dec, mat_mul_decimal(B_dec, C_dec))
+
+    print(f"(AB)C[0,0]: {ABC_dec[0][0]}")
+    print(f"A(BC)[0,0]: {A_BC_dec[0][0]}")
+    
+    diff_dec = ABC_dec[0][0] - A_BC_dec[0][0]
+    print(f"Difference: {diff_dec}")
+    print(f"Squared Difference: {diff_dec**2}")
+
+
 if __name__ == "__main__":
-    check_matrix_associativity_gurobi(3)
+    check_matrix_associativity_gurobi(4)
     verify()
