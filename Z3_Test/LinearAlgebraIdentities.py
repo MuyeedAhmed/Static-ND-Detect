@@ -64,8 +64,18 @@ def inv_sym(M, fp=True, rm=None, fp_sort=None):
         inv = [[adj[i][j] / d for j in range(n)] for i in range(n)]
     return inv, d
 
+def identity_sym(N, fp=True, rm=None, fp_sort=None):
+    res = [[None for _ in range(N)] for _ in range(N)]
+    for i in range(N):
+        for j in range(N):
+            if i == j:
+                res[i][j] = fpRealToFP(rm, RealVal(1.0), fp_sort) if fp else 1.0
+            else:
+                res[i][j] = fpRealToFP(rm, RealVal(0.0), fp_sort) if fp else 0.0
+    return res
+
 # Z3 run
-def check_identity(name, solver_cond, matrices, timeout=1800000):
+def check_identity(name, solver_cond, matrices, LHS_sym=None, RHS_sym=None, timeout=1800000):
     s = Solver()
     s.set("timeout", timeout)
     s.add(solver_cond)
@@ -81,13 +91,30 @@ def check_identity(name, solver_cond, matrices, timeout=1800000):
         def gv(v):
             try:
                 val = m.evaluate(v, model_completion=True)
-                return float(val.py_value())
+                if is_fp(val):
+                    return float(val.py_value())
+                return float(val.as_decimal(10).replace("?", ""))
             except:
                 return 0.0
         
+        vals = {}
         for m_name, m_sym in matrices.items():
             val = np.array([[gv(v) for v in row] for row in m_sym])
+            vals[m_name] = val
             print(f"Matrix {m_name}:\n{val}")
+
+        if LHS_sym is not None and RHS_sym is not None:
+            def eval_sym(sym):
+                if isinstance(sym, list):
+                    return np.array([[gv(v) for v in row] for row in sym])
+                return gv(sym)
+            
+            lhs_val = eval_sym(LHS_sym)
+            rhs_val = eval_sym(RHS_sym)
+            print(f"LHS Value:\n{lhs_val}")
+            print(f"RHS Value:\n{rhs_val}")
+            print(f"Difference (LHS - RHS):\n{lhs_val - rhs_val}")
+            
     elif res == unsat:
         print(f"Result: UNSAT (Identity holds in {duration:.2f}s)")
     else:
@@ -124,7 +151,7 @@ def VerifyTransposeSum(N=2):
     # diff = Or([LHS[i][j] != RHS[i][j] for i in range(N) for j in range(N)])
     diff = (LHS[0][1] != RHS[0][1])
    
-    check_identity("(A+B)^T = A^T + B^T", And(valid, diff), {"A": A, "B": B})
+    check_identity("(A+B)^T = A^T + B^T", And(valid, diff), {"A": A, "B": B}, LHS, RHS)
 
 # (A*B)^T = B^T * A^T
 def VerifyTransposeProduct(N=2):
@@ -139,7 +166,7 @@ def VerifyTransposeProduct(N=2):
     valid = get_valid_constraints([A, B])
     diff = Or([LHS[i][j] != RHS[i][j] for i in range(N) for j in range(N)])
     
-    check_identity("(A*B)^T = B^T * A^T", And(valid, diff), {"A": A, "B": B})
+    check_identity("(A*B)^T = B^T * A^T", And(valid, diff), {"A": A, "B": B}, LHS, RHS)
 
 # (A^-1)^-1 = A
 def VerifyInverseInverse(N=2):
@@ -148,6 +175,7 @@ def VerifyInverseInverse(N=2):
     
     A_inv, detA = inv_sym(A, fp=True, rm=rm, fp_sort=fp_sort)
     LHS, detA_inv = inv_sym(A_inv, fp=True, rm=rm, fp_sort=fp_sort)
+    RHS = A
     
     valid = And(get_valid_constraints([A]), 
                 Not(fpIsZero(detA)), Not(fpIsNaN(detA)), Not(fpIsInf(detA)),
@@ -156,7 +184,7 @@ def VerifyInverseInverse(N=2):
     # diff = Or([LHS[i][j] != A[i][j] for i in range(N) for j in range(N)])
     diff = (LHS[0][1] != A[0][1])
     
-    check_identity("(A^-1)^-1 = A", And(valid, diff), {"A": A})
+    check_identity("(A^-1)^-1 = A", And(valid, diff), {"A": A}, LHS, RHS)
 
 # (A*B)^-1 = B^-1 * A^-1
 def VerifyInverseProduct(N=2):
@@ -179,7 +207,7 @@ def VerifyInverseProduct(N=2):
     # diff = Or([LHS[i][j] != RHS[i][j] for i in range(N) for j in range(N)])
     diff = (LHS[0][1] != RHS[0][1])
 
-    check_identity("(A*B)^-1 = B^-1 * A^-1", And(valid, diff), {"A": A, "B": B})
+    check_identity("(A*B)^-1 = B^-1 * A^-1", And(valid, diff), {"A": A, "B": B}, LHS, RHS)
 
 # (A^T)^-1 = (A^-1)^T
 def VerifyTransposeInverse(N=2):
@@ -198,11 +226,86 @@ def VerifyTransposeInverse(N=2):
     
     diff = Or([LHS[i][j] != RHS[i][j] for i in range(N) for j in range(N)])
     
-    check_identity("(A^T)^-1 = (A^-1)^T", And(valid, diff), {"A": A})
+    check_identity("(A^T)^-1 = (A^-1)^T", And(valid, diff), {"A": A}, LHS, RHS)
+
+# A * A^-1 = I
+def VerifyInverseIdentity(N=2):
+    fp_sort, rm = get_fp_setup(N)
+    A = [[FP(f'a_{i}_{j}', fp_sort) for j in range(N)] for i in range(N)]
+    A_inv, detA = inv_sym(A, fp=True, rm=rm, fp_sort=fp_sort)
+    
+    LHS = matmul_sym(A, A_inv, fp=True, rm=rm)
+    RHS = identity_sym(N, fp=True, rm=rm, fp_sort=fp_sort)
+    
+    valid = And(get_valid_constraints([A]),
+                Not(fpIsZero(detA)), Not(fpIsNaN(detA)), Not(fpIsInf(detA)))
+    
+    diff = Or([LHS[i][j] != RHS[i][j] for i in range(N) for j in range(N)])
+    
+    check_identity("A * A^-1 = I", And(valid, diff), {"A": A}, LHS, RHS)
+
+# det(A*B) = det(A) * det(B)
+def VerifyDeterminantProduct(N=2):
+    fp_sort, rm = get_fp_setup(N)
+    A = [[FP(f'a_{i}_{j}', fp_sort) for j in range(N)] for i in range(N)]
+    B = [[FP(f'b_{i}_{j}', fp_sort) for j in range(N)] for i in range(N)]
+    
+    AB = matmul_sym(A, B, fp=True, rm=rm)
+    LHS = det_sym(AB, fp=True, rm=rm)
+    
+    detA = det_sym(A, fp=True, rm=rm)
+    detB = det_sym(B, fp=True, rm=rm)
+    RHS = fpMul(rm, detA, detB)
+    
+    valid = get_valid_constraints([A, B])
+    diff = (LHS != RHS)
+    
+    check_identity("det(A*B) = det(A) * det(B)", And(valid, diff), {"A": A, "B": B}, LHS, RHS)
+
+# A(BC) = (AB)C
+def VerifyMultiplicationAssociativity(N=2):
+    fp_sort, rm = get_fp_setup(N)
+    A = [[FP(f'a_{i}_{j}', fp_sort) for j in range(N)] for i in range(N)]
+    B = [[FP(f'b_{i}_{j}', fp_sort) for j in range(N)] for i in range(N)]
+    C = [[FP(f'c_{i}_{j}', fp_sort) for j in range(N)] for i in range(N)]
+    
+    BC = matmul_sym(B, C, fp=True, rm=rm)
+    LHS = matmul_sym(A, BC, fp=True, rm=rm)
+    
+    AB = matmul_sym(A, B, fp=True, rm=rm)
+    RHS = matmul_sym(AB, C, fp=True, rm=rm)
+    
+    valid = get_valid_constraints([A, B, C])
+    diff = Or([LHS[i][j] != RHS[i][j] for i in range(N) for j in range(N)])
+    
+    check_identity("A(BC) = (AB)C", And(valid, diff), {"A": A, "B": B, "C": C}, LHS, RHS)
+
+# A(B+C) = AB + AC
+def VerifyDistributivity(N=2):
+    fp_sort, rm = get_fp_setup(N)
+    A = [[FP(f'a_{i}_{j}', fp_sort) for j in range(N)] for i in range(N)]
+    B = [[FP(f'b_{i}_{j}', fp_sort) for j in range(N)] for i in range(N)]
+    C = [[FP(f'c_{i}_{j}', fp_sort) for j in range(N)] for i in range(N)]
+    
+    BplusC = add_sym(B, C, fp=True, rm=rm)
+    LHS = matmul_sym(A, BplusC, fp=True, rm=rm)
+    
+    AB = matmul_sym(A, B, fp=True, rm=rm)
+    AC = matmul_sym(A, C, fp=True, rm=rm)
+    RHS = add_sym(AB, AC, fp=True, rm=rm)
+    
+    valid = get_valid_constraints([A, B, C])
+    diff = Or([LHS[i][j] != RHS[i][j] for i in range(N) for j in range(N)])
+    
+    check_identity("A(B+C) = AB + AC", And(valid, diff), {"A": A, "B": B, "C": C}, LHS, RHS)
 
 if __name__ == "__main__":
     VerifyTransposeSum(N=2)
-    VerifyTransposeProduct(N=2)
     VerifyInverseInverse(N=2)
     VerifyInverseProduct(N=2)
+    VerifyTransposeProduct(N=2)
     VerifyTransposeInverse(N=2)
+    VerifyInverseIdentity(N=2)
+    VerifyDeterminantProduct(N=2)
+    VerifyMultiplicationAssociativity(N=2)
+    VerifyDistributivity(N=2)
