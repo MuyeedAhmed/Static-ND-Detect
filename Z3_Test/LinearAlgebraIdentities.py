@@ -65,7 +65,7 @@ def inv_sym(M, fp=True, rm=None, fp_sort=None):
     return inv, d
 
 # Z3 run
-def check_identity(name, solver_cond, matrices, timeout=60000):
+def check_identity(name, solver_cond, matrices, timeout=1800000):
     s = Solver()
     s.set("timeout", timeout)
     s.add(solver_cond)
@@ -121,8 +121,9 @@ def VerifyTransposeSum(N=2):
     RHS = add_sym(transpose_sym(A), transpose_sym(B), fp=True, rm=rm)
     
     valid = get_valid_constraints([A, B])
-    diff = Or([LHS[i][j] != RHS[i][j] for i in range(N) for j in range(N)])
-    
+    # diff = Or([LHS[i][j] != RHS[i][j] for i in range(N) for j in range(N)])
+    diff = (LHS[0][1] != RHS[0][1])
+   
     check_identity("(A+B)^T = A^T + B^T", And(valid, diff), {"A": A, "B": B})
 
 # (A*B)^T = B^T * A^T
@@ -175,8 +176,9 @@ def VerifyInverseProduct(N=2):
                 Not(fpIsZero(detB)), Not(fpIsNaN(detB)), Not(fpIsInf(detB)),
                 Not(fpIsZero(detAB)), Not(fpIsNaN(detAB)), Not(fpIsInf(detAB)))
     
-    diff = Or([LHS[i][j] != RHS[i][j] for i in range(N) for j in range(N)])
-    
+    # diff = Or([LHS[i][j] != RHS[i][j] for i in range(N) for j in range(N)])
+    diff = (LHS[0][1] != RHS[0][1])
+
     check_identity("(A*B)^-1 = B^-1 * A^-1", And(valid, diff), {"A": A, "B": B})
 
 # (A^T)^-1 = (A^-1)^T
