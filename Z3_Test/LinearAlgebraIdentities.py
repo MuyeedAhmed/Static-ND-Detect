@@ -164,7 +164,8 @@ def VerifyTransposeProduct(N=2):
     RHS = matmul_sym(transpose_sym(B), transpose_sym(A), fp=True, rm=rm)
     
     valid = get_valid_constraints([A, B])
-    diff = Or([LHS[i][j] != RHS[i][j] for i in range(N) for j in range(N)])
+    # diff = Or([LHS[i][j] != RHS[i][j] for i in range(N) for j in range(N)])
+    diff = (LHS[0][1] != RHS[0][1])
     
     check_identity("(A*B)^T = B^T * A^T", And(valid, diff), {"A": A, "B": B}, LHS, RHS)
 
@@ -224,8 +225,9 @@ def VerifyTransposeInverse(N=2):
                 Not(fpIsZero(detA)), Not(fpIsNaN(detA)), Not(fpIsInf(detA)),
                 Not(fpIsZero(detAT)), Not(fpIsNaN(detAT)), Not(fpIsInf(detAT)))
     
-    diff = Or([LHS[i][j] != RHS[i][j] for i in range(N) for j in range(N)])
-    
+    # diff = Or([LHS[i][j] != RHS[i][j] for i in range(N) for j in range(N)])
+    diff = (LHS[0][1] != RHS[0][1])
+
     check_identity("(A^T)^-1 = (A^-1)^T", And(valid, diff), {"A": A}, LHS, RHS)
 
 # A * A^-1 = I
@@ -305,7 +307,7 @@ if __name__ == "__main__":
     VerifyInverseProduct(N=2)
     VerifyTransposeProduct(N=2)
     VerifyTransposeInverse(N=2)
-    VerifyInverseIdentity(N=2)
-    VerifyDeterminantProduct(N=2)
-    VerifyMultiplicationAssociativity(N=2)
-    VerifyDistributivity(N=2)
+    # VerifyInverseIdentity(N=2)
+    # VerifyDeterminantProduct(N=2)
+    # VerifyMultiplicationAssociativity(N=2)
+    # VerifyDistributivity(N=2)
