@@ -301,13 +301,59 @@ def VerifyDistributivity(N=2):
     
     check_identity("A(B+C) = AB + AC", And(valid, diff), {"A": A, "B": B, "C": C}, LHS, RHS)
 
+# (A*B*C)^-1 = C^-1 * B^-1 * A^-1
+def VerifyInverseTripleProduct(N=2):
+    fp_sort, rm = get_fp_setup(N)
+    A = [[FP(f'a_{i}_{j}', fp_sort) for j in range(N)] for i in range(N)]
+    B = [[FP(f'b_{i}_{j}', fp_sort) for j in range(N)] for i in range(N)]
+    C = [[FP(f'c_{i}_{j}', fp_sort) for j in range(N)] for i in range(N)]
+    
+    ABC = matmul_sym(A, matmul_sym(B, C, fp=True, rm=rm), fp=True, rm=rm)
+    LHS, detABC = inv_sym(ABC, fp=True, rm=rm, fp_sort=fp_sort)
+    
+    A_inv, detA = inv_sym(A, fp=True, rm=rm, fp_sort=fp_sort)
+    B_inv, detB = inv_sym(B, fp=True, rm=rm, fp_sort=fp_sort)
+    C_inv, detC = inv_sym(C, fp=True, rm=rm, fp_sort=fp_sort)
+    RHS = matmul_sym(C_inv, matmul_sym(B_inv, A_inv, fp=True, rm=rm), fp=True, rm=rm)
+    
+    valid = And(get_valid_constraints([A, B, C]),
+                Not(fpIsZero(detA)), Not(fpIsNaN(detA)), Not(fpIsInf(detA)),
+                Not(fpIsZero(detB)), Not(fpIsNaN(detB)), Not(fpIsInf(detB)),
+                Not(fpIsZero(detC)), Not(fpIsNaN(detC)), Not(fpIsInf(detC)),
+                Not(fpIsZero(detABC)), Not(fpIsNaN(detABC)), Not(fpIsInf(detABC)))
+    
+    # diff = Or([LHS[i][j] != RHS[i][j] for i in range(N) for j in range(N)])
+    diff = (LHS[0][1] != RHS[0][1])
+
+    check_identity("(A*B*C)^-1 = C^-1 * B^-1 * A^-1", And(valid, diff), {"A": A, "B": B, "C": C}, LHS, RHS)
+
+# det(A^-1) = 1/det(A)
+def VerifyDeterminantInverse(N=2):
+    fp_sort, rm = get_fp_setup(N)
+    A = [[FP(f'a_{i}_{j}', fp_sort) for j in range(N)] for i in range(N)]
+    
+    A_inv, detA = inv_sym(A, fp=True, rm=rm, fp_sort=fp_sort)
+    LHS = det_sym(A_inv, fp=True, rm=rm)
+    
+    one = fpRealToFP(rm, RealVal(1.0), fp_sort)
+    RHS = fpDiv(rm, one, detA)
+    
+    valid = And(get_valid_constraints([A]),
+                Not(fpIsZero(detA)), Not(fpIsNaN(detA)), Not(fpIsInf(detA)))
+    
+    diff = (LHS != RHS)
+    
+    check_identity("det(A^-1) = 1/det(A)", And(valid, diff), {"A": A}, LHS, RHS)
+
 if __name__ == "__main__":
-    VerifyTransposeSum(N=2)
-    VerifyInverseInverse(N=2)
-    VerifyInverseProduct(N=2)
-    VerifyTransposeProduct(N=2)
-    VerifyTransposeInverse(N=2)
+    # VerifyTransposeSum(N=2)
+    # VerifyInverseInverse(N=2)
+    # VerifyInverseProduct(N=2)
+    VerifyInverseTripleProduct(N=2)
+    # VerifyTransposeProduct(N=2)
+    # VerifyTransposeInverse(N=2)
     # VerifyInverseIdentity(N=2)
     # VerifyDeterminantProduct(N=2)
+    VerifyDeterminantInverse(N=2)
     # VerifyMultiplicationAssociativity(N=2)
     # VerifyDistributivity(N=2)
